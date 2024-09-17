@@ -1,0 +1,68 @@
+pipeline{
+    agent any
+    
+    parameters {
+        choice(name: 'ENVIRONMENT', choices: ['dev'], description: 'Choose environment to deploy')
+    }
+
+    tools{
+        maven "MavenTool"
+    }
+    stages{
+        stage("Biuld Maven"){
+            steps{
+                checkout scmGit(branches: [[name: '*/master']], extensions: [], userRemoteConfigs: [[url: 'https://gitlab.com/cloud-devops-assignments/spring-boot-react-example']])
+                sh '''
+                    mvn clean install
+                '''
+            }
+        }
+        stage("Test Maven"){
+            steps{
+                sh '''
+                    mvn test
+                '''
+            }
+        }
+        stage("Pack Maven"){
+            steps{
+                sh '''
+                    mvn package
+                '''
+            }
+        }
+        stage("Create Docker File"){
+            steps{
+                sh '''
+                    rm Dockerfile
+                    touch Dockerfile
+                    echo "FROM openjdk:8-jdk-alpine" >> Dockerfile
+                    echo "VOLUME /tmp" >> Dockerfile
+                    echo "ARG JAR_FILE=target/*.jar" >> Dockerfile
+                    echo 'COPY ${JAR_FILE} app.jar' >> Dockerfile
+                    echo 'ENTRYPOINT [\"java\",\"-jar\",\"/app.jar\"]' >> Dockerfile
+                '''
+            }
+        }
+        stage("Deploy Docker Image to DEV"){
+            when {
+                expression {params.ENVIRONMENT == 'dev'}
+            }
+            steps{
+                script{
+                    sh '''
+                        docker build -t springio/gs-spring-boot-docker .
+                    '''
+                }
+            }
+        }
+    }
+    post {
+        success {
+            echo 'Deployment successful!'
+        }
+        failure {
+            echo 'Deployment failed!'
+        }
+    } 
+}
